@@ -1,0 +1,569 @@
+---
+title: "Formative Assessment 9: Conditional Distributions and Stochastic Independence"
+author: "Your Name"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: paged
+---
+
+# Introduction
+
+This assessment uses simulated data to examine stochastic independence, sums of
+independent random variables, and conditional distributions in both discrete
+and continuous settings. Simulation is used so that the probability
+distributions and their parameters are known and the theoretical results can
+be compared with empirical results. The random seed is fixed to make the
+analysis reproducible.
+
+# Dataset Description or Simulation Design
+
+No external dataset is used. The assessment uses four separate simulations:
+
+1. **Part 1:** A pair of correlated continuous random variables generated from
+   a bivariate normal model with standard normal marginal distributions and
+   correlation 0.70.
+2. **Part 2:** Two independent Poisson random variables, with parameters
+   4 and 6, respectively.
+3. **Part 3:** Two discrete categorical variables, where the conditional
+   distribution of the first variable depends on the category of the second.
+4. **Part 4:** Two continuous variables, where `Y` is related to `X` through a
+   linear model with normally distributed random error.
+
+All simulations are generated in R. The sample size is 10,000 unless
+otherwise stated.
+
+```{r setup, message=FALSE, warning=FALSE}
+set.seed(1110)
+options(width = 100)
+n <- 10000
+```
+
+# Stochastic Independence
+
+## Part 1(a): Description of the random variables
+
+Let `X1` and `Y1` be continuous random variables with a bivariate normal
+distribution. Both variables have standard normal marginal distributions:
+
+- `X1` has mean 0 and variance 1.
+- `Y1` has mean 0 and variance 1.
+- Their population correlation is 0.70.
+
+The positive correlation means that larger values of `X1` tend to occur with
+larger values of `Y1`. The variables are generated using independent standard
+normal variables and a transformation that introduces the specified
+correlation.
+
+## Part 1(b): Examine the relationship
+
+```{r p1-generate}
+rho <- 0.70
+Z1 <- rnorm(n)
+Z2 <- rnorm(n)
+
+X1 <- Z1
+Y1 <- rho * Z1 + sqrt(1 - rho^2) * Z2
+
+part1_data <- data.frame(X1 = X1, Y1 = Y1)
+
+correlation_part1 <- cor(X1, Y1)
+correlation_part1
+```
+
+```{r p1-scatter, fig.cap="Scatterplot of X1 and Y1"}
+plot(
+  X1, Y1,
+  pch = 16, cex = 0.45,
+  col = rgb(0, 0, 1, 0.25),
+  main = "Relationship Between X1 and Y1",
+  xlab = "X1", ylab = "Y1"
+)
+abline(lm(Y1 ~ X1), lwd = 2, col = "red")
+```
+
+The scatterplot and sample correlation describe the relationship between the
+variables. A positive upward pattern and a correlation near 0.70 indicate a
+positive linear association. Correlation alone does not establish independence;
+in this bivariate normal model, a nonzero correlation also means the variables
+are not independent.
+
+## Part 1(c): Joint and marginal distributions
+
+The marginal distributions of `X1` and `Y1` are both standard normal. The
+following plots show the marginal distributions and the joint pattern.
+
+```{r p1-marginal-joint, fig.cap="Marginal distributions and joint distribution of X1 and Y1"}
+par(mfrow = c(1, 3))
+
+hist(X1, probability = TRUE, breaks = 35,
+     main = "Marginal Distribution of X1", xlab = "X1")
+curve(dnorm(x), add = TRUE, col = "red", lwd = 2)
+
+hist(Y1, probability = TRUE, breaks = 35,
+     main = "Marginal Distribution of Y1", xlab = "Y1")
+curve(dnorm(x), add = TRUE, col = "red", lwd = 2)
+
+smoothScatter(X1, Y1, main = "Joint Distribution",
+              xlab = "X1", ylab = "Y1")
+par(mfrow = c(1, 1))
+```
+
+To examine the factorization criterion empirically, the data are divided into
+intervals. If the variables were independent, the probability in each joint
+cell would be approximately the product of the corresponding marginal
+probabilities.
+
+```{r p1-factorization-empirical}
+breaks_x <- seq(-3, 3, length.out = 7)
+breaks_y <- seq(-3, 3, length.out = 7)
+
+bin_x <- cut(X1, breaks = breaks_x, include.lowest = TRUE)
+bin_y <- cut(Y1, breaks = breaks_y, include.lowest = TRUE)
+
+joint_empirical <- prop.table(table(bin_x, bin_y))
+marginal_x_empirical <- prop.table(table(bin_x))
+marginal_y_empirical <- prop.table(table(bin_y))
+
+independence_expected <- outer(
+  as.numeric(marginal_x_empirical),
+  as.numeric(marginal_y_empirical)
+)
+
+max_difference <- max(abs(
+  as.matrix(joint_empirical) - independence_expected
+))
+
+max_difference
+```
+
+The maximum absolute difference measures the largest discrepancy between the
+observed joint cell probabilities and the probabilities expected under
+independence. Sampling variation is expected, but a systematic discrepancy is
+evidence against independence.
+
+## Part 1(d): Factorization criterion and conclusion
+
+For continuous random variables, independence requires
+
+\[
+f_{X_1,Y_1}(x,y) = f_{X_1}(x)f_{Y_1}(y)
+\]
+
+for all relevant values of `x` and `y`. For this bivariate normal model, the
+joint density is
+
+\[
+f_{X_1,Y_1}(x,y) =
+\frac{1}{2\pi\sqrt{1-\rho^2}}
+\exp\left[
+-\frac{x^2-2\rho xy+y^2}{2(1-\rho^2)}
+\right].
+\]
+
+The product of the two standard normal marginal densities is evaluated below
+at the point (0, 0). If the factorization criterion held, the ratio would be 1.
+
+```{r p1-density-factorization}
+x0 <- 0
+y0 <- 0
+
+joint_density_00 <- (1 / (2 * pi * sqrt(1 - rho^2))) *
+  exp(
+    -(x0^2 - 2 * rho * x0 * y0 + y0^2) /
+      (2 * (1 - rho^2))
+  )
+
+product_marginals_00 <- dnorm(x0) * dnorm(y0)
+density_ratio_00 <- joint_density_00 / product_marginals_00
+
+data.frame(
+  Joint_density = joint_density_00,
+  Product_of_marginals = product_marginals_00,
+  Ratio = density_ratio_00
+)
+```
+
+**Interpretation:** The sample correlation should be close to the specified
+population correlation of 0.70. The scatterplot should show a positive
+association, and the joint density does not factor into the product of the
+marginal densities. Therefore, `X1` and `Y1` are not independent. This is
+consistent with the factorization criterion: independence would require the
+joint density to equal the product of the marginal densities.
+
+# Sums of Independent Random Variables
+
+## Part 2(a): Specify the distributions
+
+Let
+
+\[
+X_2 \sim \operatorname{Poisson}(4), \qquad
+Y_2 \sim \operatorname{Poisson}(6),
+\]
+
+where `X2` and `Y2` are generated independently. A Poisson random variable
+models a count over a fixed interval. Its mean and variance are both equal to
+its parameter.
+
+## Part 2(b): Generate independent observations
+
+```{r p2-generate}
+set.seed(2222)
+n2 <- 10000
+
+X2 <- rpois(n2, lambda = 4)
+Y2 <- rpois(n2, lambda = 6)
+
+# The two vectors are generated using separate random draws.
+S <- X2 + Y2
+
+head(data.frame(X2, Y2, S))
+```
+
+## Part 2(c): Distribution of the sum
+
+The sum of two independent Poisson random variables is also Poisson, with
+parameter equal to the sum of the two parameters. Thus,
+
+\[
+S = X_2 + Y_2 \sim \operatorname{Poisson}(4+6)
+= \operatorname{Poisson}(10).
+\]
+
+```{r p2-histogram, fig.cap="Simulated distribution of S compared with the theoretical Poisson(10) distribution"}
+hist(
+  S,
+  breaks = seq(-0.5, max(S) + 0.5, by = 1),
+  probability = TRUE,
+  main = "Distribution of S = X2 + Y2",
+  xlab = "S",
+  col = "lightgray",
+  border = "white"
+)
+
+possible_s <- 0:max(S)
+points(
+  possible_s,
+  dpois(possible_s, lambda = 10),
+  col = "red",
+  pch = 19
+)
+lines(
+  possible_s,
+  dpois(possible_s, lambda = 10),
+  col = "red",
+  type = "b"
+)
+
+legend(
+  "topright",
+  legend = c("Simulated", "Theoretical Poisson(10)"),
+  pch = c(15, 19),
+  col = c("lightgray", "red"),
+  bty = "n"
+)
+```
+
+## Part 2(d): Theoretical and simulated mean and variance
+
+For independent random variables,
+
+\[
+E(X_2+Y_2)=E(X_2)+E(Y_2)
+\]
+
+and
+
+\[
+\operatorname{Var}(X_2+Y_2)
+=\operatorname{Var}(X_2)+\operatorname{Var}(Y_2).
+\]
+
+For the selected distributions, the theoretical expected value and variance
+of `S` are both 10.
+
+```{r p2-comparison}
+theoretical_mean_S <- 4 + 6
+theoretical_variance_S <- 4 + 6
+
+simulated_mean_S <- mean(S)
+simulated_variance_S <- var(S)
+
+comparison_S <- data.frame(
+  Measure = c("Expected value", "Variance"),
+  Theoretical = c(theoretical_mean_S, theoretical_variance_S),
+  Simulated = c(simulated_mean_S, simulated_variance_S)
+)
+
+comparison_S
+```
+
+**Interpretation:** The simulated mean and variance should be reasonably close
+to the theoretical values of 10. Small differences are expected because the
+simulation uses a finite sample. The results support the properties of sums
+of independent random variables: expected values add, and variances add when
+the variables are independent. The sum also follows a Poisson distribution
+with parameter 10.
+
+# Conditional Distributions – Discrete Case
+
+## Part 3(a): Construct the joint probability distribution
+
+Let `X3` represent a category with levels Low, Medium, and High, and let `Y3`
+represent Group A or Group B. The distribution of `X3` is deliberately made
+different across the two groups:
+
+| Category of X3 | P(X3 given Y3 = A) | P(X3 given Y3 = B) |
+|---|---:|---:|
+| Low | 0.60 | 0.20 |
+| Medium | 0.30 | 0.30 |
+| High | 0.10 | 0.50 |
+
+The groups are generated with equal probability.
+
+```{r p3-generate}
+set.seed(3333)
+n3 <- 10000
+
+Y3 <- sample(c("A", "B"), size = n3, replace = TRUE)
+u <- runif(n3)
+
+X3 <- ifelse(
+  Y3 == "A",
+  ifelse(u < 0.60, "Low",
+         ifelse(u < 0.90, "Medium", "High")),
+  ifelse(u < 0.20, "Low",
+         ifelse(u < 0.50, "Medium", "High"))
+)
+
+X3 <- factor(X3, levels = c("Low", "Medium", "High"))
+Y3 <- factor(Y3, levels = c("A", "B"))
+
+discrete_data <- data.frame(X3, Y3)
+head(discrete_data)
+```
+
+The joint probability distribution is estimated using the relative frequency
+of each combination of `X3` and `Y3`.
+
+```{r p3-joint}
+joint_X3_Y3 <- prop.table(table(X3, Y3))
+joint_X3_Y3
+```
+
+## Part 3(b): Obtain the marginal distributions
+
+The marginal distribution of `X3` is obtained by summing the joint
+probabilities across the columns. The marginal distribution of `Y3` is
+obtained by summing across the rows.
+
+```{r p3-marginal}
+marginal_X3 <- margin.table(joint_X3_Y3, margin = 1)
+marginal_Y3 <- margin.table(joint_X3_Y3, margin = 2)
+
+marginal_X3
+marginal_Y3
+```
+
+## Part 3(c): Conditional distribution of X3 given Y3 = A
+
+The conditional probability distribution is calculated by dividing each joint
+probability by the marginal probability of the conditioning event. In R,
+`prop.table(..., margin = 2)` calculates the conditional distribution of the
+row variable `X3` for each column value of `Y3`.
+
+```{r p3-conditional}
+conditional_X3_given_Y3 <- prop.table(joint_X3_Y3, margin = 2)
+conditional_X3_given_Y3
+
+conditional_A <- conditional_X3_given_Y3[, "A"]
+conditional_A
+```
+
+## Part 3(d): Interpretation
+
+```{r p3-conditional-plot, fig.cap="Conditional distribution of X3 for each group"}
+barplot(
+  conditional_X3_given_Y3,
+  beside = TRUE,
+  col = c("skyblue", "orange", "seagreen"),
+  main = "Conditional Distribution of X3 Given Y3",
+  xlab = "Group (Y3)",
+  ylab = "Conditional Probability",
+  legend.text = rownames(conditional_X3_given_Y3),
+  args.legend = list(title = "Category of X3", x = "topright", bty = "n")
+)
+```
+
+**Interpretation:** The conditional distribution of `X3` changes depending on
+the value of `Y3`. Group A is expected to have a larger proportion in the Low
+category, while Group B is expected to have a larger proportion in the High
+category. Therefore, knowing the group provides information about the
+category of `X3`. The two discrete variables are not independent because the
+conditional distribution of `X3` is not the same for each value of `Y3`.
+
+# Conditional Distributions – Continuous Case
+
+## Part 4(a): Generate and describe two continuous random variables
+
+Let
+
+\[
+X_4 \sim N(0,1)
+\]
+
+and define
+
+\[
+Y_4 = 0.8X_4 + \varepsilon,
+\qquad \varepsilon \sim N(0,0.6^2),
+\]
+
+where the error term is generated independently of `X4`. Both variables are
+continuous. The construction creates a positive relationship between `X4`
+and `Y4`.
+
+```{r p4-generate}
+set.seed(4444)
+n4 <- 10000
+
+X4 <- rnorm(n4, mean = 0, sd = 1)
+error4 <- rnorm(n4, mean = 0, sd = 0.6)
+Y4 <- 0.8 * X4 + error4
+
+continuous_data <- data.frame(X4, Y4)
+
+summary(continuous_data)
+cor(X4, Y4)
+```
+
+## Part 4(b): Marginal and joint distributions
+
+The histograms estimate the marginal distributions. The scatterplot displays
+the joint relationship between the two variables.
+
+```{r p4-marginal-joint, fig.cap="Marginal distributions and joint relationship of X4 and Y4"}
+par(mfrow = c(1, 3))
+
+hist(X4, probability = TRUE, breaks = 35,
+     main = "Marginal Distribution of X4", xlab = "X4")
+lines(density(X4), col = "red", lwd = 2)
+
+hist(Y4, probability = TRUE, breaks = 35,
+     main = "Marginal Distribution of Y4", xlab = "Y4")
+lines(density(Y4), col = "red", lwd = 2)
+
+plot(X4, Y4, pch = 16, cex = 0.45,
+     col = rgb(0, 0, 1, 0.20),
+     main = "Joint Distribution of X4 and Y4",
+     xlab = "X4", ylab = "Y4")
+abline(lm(Y4 ~ X4), col = "red", lwd = 2)
+
+par(mfrow = c(1, 1))
+```
+
+## Part 4(c): Empirical conditional distribution of X4 given an interval of Y4
+
+A continuous variable generally has probability zero of taking one exact
+specified value. Therefore, an interval of `Y4` is selected. Here, the
+60th-to-70th percentile interval is used. The conditional sample consists of
+all observations whose `Y4` values fall within that interval.
+
+```{r p4-conditional-selection}
+selected_interval <- as.numeric(
+  quantile(Y4, probs = c(0.60, 0.70))
+)
+
+lower_y <- selected_interval[1]
+upper_y <- selected_interval[2]
+
+selected <- Y4 >= lower_y & Y4 <= upper_y
+X4_given_interval <- X4[selected]
+
+c(
+  Lower_Y = lower_y,
+  Upper_Y = upper_y,
+  Number_of_observations = sum(selected)
+)
+```
+
+```{r p4-conditional-density, fig.cap="Empirical distribution of X4 overall and conditional on Y4 being in the selected interval"}
+plot(
+  density(X4),
+  lwd = 2,
+  main = "Distribution of X4: Overall vs Conditional",
+  xlab = "X4",
+  ylim = c(0, max(density(X4)$y, density(X4_given_interval)$y) * 1.1)
+)
+
+lines(
+  density(X4_given_interval),
+  col = "red",
+  lwd = 2
+)
+
+legend(
+  "topright",
+  legend = c("Overall X4", "X4 given selected Y4 interval"),
+  col = c("black", "red"),
+  lwd = 2,
+  bty = "n"
+)
+```
+
+## Part 4(d): Interpretation and conditional density
+
+For continuous random variables, the conditional density is
+
+\[
+f_{X_4\mid Y_4}(x\mid y)
+=
+\frac{f_{X_4,Y_4}(x,y)}{f_{Y_4}(y)},
+\]
+
+provided that the marginal density in the denominator is positive. This
+formula describes the density of `X4` when `Y4` is fixed at a value `y`.
+Because the simulation uses an interval rather than one exact value, the
+density curve above is an empirical approximation to the distribution of
+`X4` among observations with `Y4` in that interval.
+
+```{r p4-conditional-summary}
+conditional_summary <- data.frame(
+  Measure = c("Mean of X4", "Standard deviation of X4"),
+  Overall = c(mean(X4), sd(X4)),
+  Conditional = c(mean(X4_given_interval), sd(X4_given_interval))
+)
+
+conditional_summary
+```
+
+**Interpretation:** Since `Y4` tends to increase as `X4` increases, selecting
+observations with `Y4` in a relatively higher interval is expected to change
+the distribution of `X4`. The conditional density curve may be shifted
+relative to the overall density curve. The conditional mean and standard
+deviation provide numerical summaries of this change. This illustrates that
+conditioning on `Y4` provides information about the likely values of `X4`.
+
+# Conclusion
+
+The simulations demonstrate the main ideas of stochastic independence and
+conditional distributions. In Part 1, the two continuous variables were
+positively correlated and did not satisfy the density factorization criterion,
+so they were not independent. In Part 2, the sum of independent Poisson
+random variables followed the expected Poisson distribution, and its
+theoretical mean and variance were supported by the simulated results. In
+Part 3, the conditional distribution of a discrete variable differed between
+the two groups, showing dependence. In Part 4, conditioning on an interval of
+a related continuous variable changed the empirical distribution of the other
+variable. Overall, the computations and visualizations illustrate how joint,
+marginal, and conditional distributions are used to study relationships
+between random variables.
+
+# References
+
+No external dataset or outside source was used. All data were simulated in R
+using the probability distributions and parameters specified in this document.
